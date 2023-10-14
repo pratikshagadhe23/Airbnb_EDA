@@ -1,0 +1,468 @@
+---
+title: "Airbnb Listings in Texas Data Analysis"
+author: "Niharika Patil, Pratiksha Gadhe,Yashi Agarwal"
+format: 
+  html:
+    self-contained: true
+---
+
+#### Research Questions
+
+#### What are the factors and features of a listing that make an Airbnb listing more expensive?
+
+##### SUBQS: 1)How do ratings and reviews impact the pricing of Airbnb listings?
+
+##### 2)Is the location or neighborhood a significant factor in determining the price of an Airbnb listing?
+
+##### 3)Are specific property types, such as rental units, more expensive than others?
+
+##### 4)Do the number of bedrooms and beds affect the price of an Airbnb listing?
+
+##### 5)Are certain types of baths (private, shared, etc.) associated with higher or lower prices?
+
+##### 6)Does the room type (e.g., private room, entire home) influence the pricing of Airbnb listings?
+
+```{r,warning=FALSE}
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+airbnb <-read_csv("listings.csv")
+head(airbnb)
+str(airbnb)
+```
+
+```{r}
+airbnb_2 <- subset(airbnb,select= -c(neighbourhood_group,license))
+str(airbnb_2)
+```
+### Data Cleaning
+
+```{r}
+# Define a function to insert ★ after the first period (.) in a string
+# For data analysis, we need tidy data set. Each listing doesn't have ratings, so adding a dummy ratings value for analysis purpose.
+
+add_star_if_needed <- function(x) {
+  if (!grepl(" · ★", x)) {
+    x <- sub(" · ", " · ★ 0 · ", x)
+  }
+  return(x)
+}
+```
+
+```{r}
+# Apply the function to the entire "name" column
+airbnb_2$name <- lapply(airbnb_2$name, add_star_if_needed)
+```
+
+```{r}
+airbnb_2 <- airbnb_2 |>
+  separate(name, into = c("Type of House", "Ratings", "Bedroom", "Beds", "Baths"), sep = " · ")
+airbnb_2
+```
+
+```{r}
+airbnb_2 <- airbnb_2 |>
+  separate(`Type of House`, into = c("Type of House", "City"), sep = " in ")
+airbnb_2
+```
+
+```{r}
+# Remove the star character from 'Ratings'
+airbnb_2$Ratings <- gsub("★", "", airbnb_2$Ratings)
+airbnb_2
+```
+
+```{r}
+#0 meant no ratings to the house, for analysis purpose rather than keeping it 0 which can be possible rating, gave the value 10.
+
+#Ratings are out of 5. So any but (0 to 5 ) value seems reasonable. 
+
+# Replace " 0" with 10 in the Ratings column (no ratings)
+airbnb_2$Ratings[airbnb_2$Ratings == " 0"] <- "10"
+
+
+# Replace "New" with 11 in the Ratings column (new houses)
+airbnb_2$Ratings[airbnb_2$Ratings == "New"] <- "11"
+
+
+# Replace "studio" with 0 in airbnb_2$bedroom (no bedrooms/studio apts)
+airbnb_2$Bedroom[airbnb_2$Bedroom == "Studio"] <- "0"
+
+# Remove "bedroom" or "bedrooms" from the "Bedroom" column 
+airbnb_2$Bedroom <- gsub(c("bedroom", "bedrooms"), "", airbnb_2$Bedroom)
+airbnb_2$Bedroom <- gsub("s", "", airbnb_2$Bedroom)
+
+# Remove "bed" and "beds" from the "Beds" column
+airbnb_2$Beds <- gsub(c("bed"), "", airbnb_2$Beds)
+airbnb_2$Beds <- gsub(c("s"), "", airbnb_2$Beds)
+
+```
+
+```{r}
+sum(is.na(airbnb_2$Baths))
+```
+
+```{r}
+# Identify columns with NA values
+cols_with_na <- colnames(airbnb_2)[colSums(is.na(airbnb_2)) > 0]
+cols_with_na
+```
+
+```{r}
+# Total NA cases
+sum(is.na(airbnb_2$Beds))
+sum(is.na(airbnb_2$Baths))
+sum(is.na(airbnb_2$reviews_per_month))
+```
+
+```{r}
+# Drop rows with NA values in "beds" and "bathrooms" columns
+airbnb_2 <- airbnb_2[complete.cases(airbnb_2[, c("Beds", "Baths")]), ]
+```
+
+```{r}
+# Total NA cases
+sum(is.na(airbnb_2$Beds))
+sum(is.na(airbnb_2$Baths))
+sum(is.na(airbnb_2$reviews_per_month))
+```
+
+```{r}
+# Check min and max values
+summary(airbnb_2$reviews_per_month)
+str(airbnb_2$reviews_per_month)
+```
+
+```{r}
+# Replace NA which means no reviews with 100
+airbnb_2$reviews_per_month[is.na(airbnb_2$reviews_per_month)] <- 100
+
+```
+
+```{r}
+str(airbnb_2)
+```
+
+```{r}
+columns_to_convert_factor <- c("Type of House", "City", "Baths", "room_type")
+
+columns_to_convert_num <- c("Ratings", "Bedroom", "Beds")
+
+# Convert the specified columns to factors using lapply
+airbnb_2[columns_to_convert_factor] <- lapply(airbnb_2[columns_to_convert_factor], factor)
+
+
+# Convert the specified columns to num using lapply
+airbnb_2[columns_to_convert_num] <- lapply(airbnb_2[columns_to_convert_num], as.numeric)
+
+```
+
+```{r}
+levels(airbnb_2$City)
+```
+
+```{r}
+
+airbnb_2$City <- as.character(airbnb_2$City)
+airbnb_2$City <- gsub("austin", "Austin", airbnb_2$City)
+airbnb_2$City <- gsub("Austin ", "Austin", airbnb_2$City)
+airbnb_2$City <- gsub("Austin Texas", "Austin", airbnb_2$City)
+airbnb_2$City <- gsub("East Austin", "Austin", airbnb_2$City)
+
+```
+
+```{r}
+airbnb_2$City <- as.factor(airbnb_2$City)
+levels(airbnb_2$City )
+```
+
+```{r}
+airbnb_2$City <- as.character(airbnb_2$City)
+airbnb_2$City <- gsub("AustinTexas", "Austin", airbnb_2$City)
+airbnb_2$City <- gsub("West Lake Hills", "Westlake Hills", airbnb_2$City)
+airbnb_2$City <- gsub("Westlake Hills, Austin", "Westlake Hills", airbnb_2$City)
+airbnb_2$City <- gsub("Texas", "Westlake Hills", airbnb_2$City)
+
+```
+
+```{r}
+airbnb_2$City <- as.factor(airbnb_2$City)
+levels(airbnb_2$City )
+```
+
+```{r}
+table(airbnb_2$City)
+
+```
+
+```{r}
+table(airbnb_2$`Type of House`)
+```
+
+```{r}
+table(airbnb_2$Baths)
+```
+
+```{r}
+table(airbnb_2$room_type)
+```
+
+```{r}
+# Convert the character dates to Date objects
+airbnb_2$last_review <- as.Date(airbnb_2$last_review, format = "%Y-%m-%d")
+```
+
+```{r}
+str(airbnb_2)
+airbnb_2
+```
+
+-   There are 39 types of houses.
+-   There are 21 Locations in Texas.
+-   There are 36 types of Baths.
+-   There are 4 room types.
+
+### Exploratory data analysis, data visualization, and statistical analysis.
+
+```{r}
+#Univariate Analysis: Examining each variable individually.
+# Checking for Outliers in price
+
+#install.packages("gridExtra")
+library(gridExtra)
+
+
+  ggplot(data = airbnb_2, aes(x = price)) +
+  geom_histogram(binwidth = 400, fill = "skyblue", color = "black") +
+  labs(x = "Price", y = "Frequency") +
+  theme_minimal()
+
+```
+
+-   This plot shows there are some extreme outliers present in price making it rightly skewed. This can be luxurious home, or price might be a human error. It makes it different from rest of the cluster. Therefore, not considering outliers for this analysis.
+
+```{r}
+# Removing the Outliers in the price
+# Calculate the IQR for the 'price' variable
+
+Q1 <- quantile(airbnb_2$price, 0.25)
+Q3 <- quantile(airbnb_2$price, 0.75)
+IQR <- Q3 - Q1
+
+# Define the lower and upper bounds for identifying outliers
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+# Identify outliers
+outliers <- airbnb_2$price < lower_bound | airbnb_2$price > upper_bound
+
+# Create a new dataset without outliers
+airbnb_no_outliers <- airbnb_2[!outliers, ]
+
+# Check the dimensions of the new dataset
+dim(airbnb_no_outliers)
+```
+
+```{r}
+# Summary Statistics:
+summary(airbnb_no_outliers)
+```
+
+```{r}
+# Number of Airbnb properties under each host_id's.
+
+filtered <- airbnb_no_outliers%>%
+  group_by(`host_id`) %>%
+  summarize(count = n()) %>%
+  arrange(desc(count))
+filtered
+```
+
+-   107434423 host_id has most of the houses listed on Airbnb.
+
+```{r}
+# Ratings given to Airbnb based on days of the week. 
+
+# Using the mutate function to add the day of the week column to dataset
+airbnb_no_outliers <- airbnb_no_outliers %>% 
+  mutate(day_of_week = weekdays(airbnb_no_outliers$last_review))
+
+# ratings count by day of the week
+result <- airbnb_no_outliers %>%
+  group_by(day_of_week) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+result
+```
+
+-   Sunday is the day of week when people rate the Airbnb.
+
+-   After that it gradually reduces during working days.
+
+-   NA's represent no date present in the dataset. It can be new property, no ratings.
+
+```{r}
+# Top rated Hosts
+ratings_value <- subset(airbnb_no_outliers,select= c(host_name, Ratings, City,`Type of House`,number_of_reviews_ltm ))
+
+ratings_values_true <- ratings_value %>%
+  filter(Ratings >= 0 & Ratings <= 5 & !(Ratings %in% c(10, 11))) %>%
+  arrange(desc(Ratings))
+ratings_values_true
+
+# filtering out hosts with ratings 5/5
+count_of_hosts_with_rating_5 <- ratings_values_true %>%
+  filter(Ratings == 5) %>%
+  summarise(count = n())
+
+count_of_hosts_with_rating_5
+
+```
+
+-   Top 10 hosts are based in Austin area with ratings 5/5.
+
+-   There are 2292 hosts with 5/5 ratings.
+
+```{r}
+# Most popular type of house
+popular_types <- ratings_values_true %>%
+                       group_by(`Type of House`) %>%
+                             summarise(count = n()) %>%
+                                  arrange(desc(count))
+popular_types
+```
+
+-   " Home" is most popular AirBnB type of house in the Texas. Followed by Rental units and Condos.
+
+```{r}
+# Price based on Room Type vs Type of House
+
+ggplot(airbnb_no_outliers, aes(x = room_type, y = `Type of House`, fill = price)) +
+  geom_tile() +
+  labs(title = "Room Type vs Type of House Based on Price") +
+  xlab("Room Type") +
+  ylab("Type of House") +
+  scale_fill_gradientn(colors = c("yellow", "darkgreen", "black"), values = scales::rescale(c(0, 500, max(airbnb_no_outliers$price)))) +
+  theme_minimal()
+
+```
+
+-   "Entire home/apt" listings tend to have higher prices, "Shared room" listings are generally the most budget-friendly option, and their prices are similar across different types of houses.
+
+-   In Entire home/apt , "Place to stay" type of house is priced highest, followed by "Home", "Aparthotel" and "Bus", "Barn", "Casa Particular" have lowest prices.
+
+-   In Hotel room, prices are moderate for "resort".
+
+-   In Private room type, "bungalows" are priced highest, "home" and "guesthouse" are prices lower.
+
+-   In shared room, only "Camper/RV" and "Townhouses" are costlier , rest are budget friendly.
+
+```{r}
+# Price based on Room Type vs Location
+
+ggplot(airbnb_no_outliers, aes(x = room_type, y = City, fill = price)) +
+  geom_tile() +
+  labs(title = "Room Type vs location Based on Price") +
+  xlab("Room Type") +
+  ylab("Location") +
+  scale_fill_gradientn(colors = c("yellow", "darkgreen", "black"), values = scales::rescale(c(0, 500, max(airbnb_no_outliers$price)))) +
+  theme_minimal()
+
+```
+
+-   Room Type Impact: "Entire home/apartment" listings tend to be more expensive (darker tiles) than rest of the others listings in all locations."Shared room" tend to be budget friendly.
+
+-   Location Impact: Bee Cave location is having higher prices, followed by Austin and WestLake Hills. However, if used shared room in austin that tends to be budget friendly, followed by Manchaca location.
+
+```{r}
+# Price based on Baths vs Bedrooms
+
+ggplot(airbnb_no_outliers, aes(x = Baths, y = Bedroom, fill = price)) +
+  geom_tile() +
+  labs(title = "Baths vs Bedroom Based on Price") +
+  xlab("Baths") +
+  ylab("Bedroom") +
+  scale_fill_gradientn(colors = c("yellow", "darkgreen", "black"), values = scales::rescale(c(0, 500, max(airbnb_no_outliers$price)))) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+-   The price is higher for bathrooms in range of 3 to 5.5 and bedrooms in range 4 to 8.
+
+-   Rest of types of bedrooms and baths have lesser price.
+
+```{r}
+# Price based on Ratings vs Number of Reviews
+
+ggplot(airbnb_no_outliers, aes(x = Ratings, y = number_of_reviews, color = price)) +
+  geom_point(size = 2) +
+  labs(title = "Ratings vs Number of Reviews by Price") +
+  xlab("Ratings") +
+  ylab("Number of Reviews") +
+  theme_minimal() +
+  scale_color_gradient(low = "blue", high = "red") +
+  xlim(0, 5) +
+  ylim(0, 600)
+
+
+```
+
+-   The scatter plot appears to show a scattered distribution of data points, which suggests that there isn't a strong, linear correlation between ratings, number of reviews and price. Listings with different ratings and number of reviews can be found at various price points.
+
+-   Outliers: There might be some outliers, which are listings with high prices but varying ratings, number of ratings. These outliers could indicate unique, premium listings.
+
+-   Clusters: While there isn't a clear linear trend, we might notice some loose clusters or patterns. For example,many highly-rated listings are concentrated in a specific price range, or that low-rated listings are often more budget-friendly. However, these clusters are not as pronounced.
+
+```{r}
+# Price based on longitude vs latitude 
+
+ggplot(airbnb_no_outliers, aes(x = longitude, y = latitude, color = price)) +
+  geom_point() +
+  labs(title = "Price Variations Across Latitude and Longitude Coordinates") +
+  scale_color_gradient(low = "blue", high = "red") +
+  theme_minimal()
+
+
+```
+
+-   From the above plot we can see that there is no strong correlation of latitude, Longitude with prices. Although we can see that at longitude greater than -97.8 there are some lesser price airbnbs along with some higher price ones.
+
+```{r}
+# Neighborhood vs Mean Price
+airbnb_no_outliers_summary <- airbnb_no_outliers %>%
+  group_by(neighbourhood) %>%
+  summarize(mean_price = mean(price),number_of_listings = n())
+
+ggplot(airbnb_no_outliers_summary, aes(x = neighbourhood, y = mean_price)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(title = "Neighborhood vs Mean Price") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  theme_minimal()
+
+
+# Sort the summary data by mean price in descending order
+sorted_summary <- airbnb_no_outliers_summary[order(airbnb_no_outliers_summary$mean_price, decreasing = TRUE), ]
+
+# Extract the neighborhood with the highest mean price
+highest_mean_price_neighborhood <- sorted_summary$neighbourhood[1]
+highest_mean_price <- sorted_summary$mean_price[1]
+
+# Extract the neighborhood with the lowest mean price
+lowest_mean_price_neighborhood <- sorted_summary$neighbourhood[nrow(sorted_summary)]
+lowest_mean_price <- sorted_summary$mean_price[nrow(sorted_summary)]
+
+cat("Neighborhood with the highest mean price:", highest_mean_price_neighborhood, "($", highest_mean_price, ")\n")
+cat("Neighborhood with the lowest mean price:", lowest_mean_price_neighborhood, "($", lowest_mean_price, ")\n")
+
+```
+
+-   On x-axis, each bar corresponds to a different neighbourhood.
+
+-   On y-axis, the mean_price indicates average price range for Airbnb listings that visitors can expect to encounter when booking accommodations in that neighbourhood.
+
+-   By analyzing the number of listings and prices for each neighborhood, we can observe the price variation across different neighbourhoods.Some neighbourhoods have expensive listings while others are more affordable.
+
+-   Neighborhood with the highest mean price: 78712 (\$ 500 )
+
+-   Neighborhood with the lowest mean price: 78719 (\$ 113.8421 )
